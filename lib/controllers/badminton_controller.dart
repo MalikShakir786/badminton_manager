@@ -6,6 +6,7 @@ import '../models/member.dart';
 import '../models/collection_event.dart';
 import '../models/payment_record.dart';
 import '../models/member_balance.dart';
+import '../models/badminton_match.dart';
 
 class BadmintonController extends GetxController {
   final GetStorage _storage;
@@ -20,6 +21,12 @@ class BadmintonController extends GetxController {
   final RxString currencySymbol = '₹'.obs;
   final RxString searchQuery = ''.obs;
   final RxString filterStatus = 'all'.obs; // 'all', 'pending', 'settled'
+
+  // Matchmaking State
+  final RxSet<String> selectedPresentMemberIds = <String>{}.obs;
+  final Rx<MatchRound?> currentMatchRound = Rx<MatchRound?>(null);
+  final RxInt matchRoundNumber = 1.obs;
+  final RxList<String> lastRestedMemberIds = <String>[].obs;
 
   static const List<int> avatarColors = [
     0xFF1B5E20, // Green
@@ -93,6 +100,10 @@ class BadmintonController extends GetxController {
     if (members.isEmpty) {
       loadInitialSampleData();
     }
+
+    // Default all active members to present for matchmaking
+    selectedPresentMemberIds.assignAll(
+        members.where((m) => m.isActive).map((m) => m.id));
   }
 
   void saveToStorage() {
@@ -200,7 +211,11 @@ class BadmintonController extends GetxController {
       allMemberBalances.where((b) => b.remainingDue <= 0).length;
 
   // MARK: - Member Operations
-  void addMember({required String name, String phone = ''}) {
+  void addMember({
+    required String name,
+    String phone = '',
+    int skillLevel = 2,
+  }) {
     final randomColor = avatarColors[Random().nextInt(avatarColors.length)];
     final newMember = Member(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -209,12 +224,14 @@ class BadmintonController extends GetxController {
       colorValue: randomColor,
       isActive: true,
       joinedAt: DateTime.now(),
+      skillLevel: skillLevel,
     );
     members.add(newMember);
+    selectedPresentMemberIds.add(newMember.id);
     saveToStorage();
     _showSnackbar(
       'Member Added',
-      '${newMember.name} joined the badminton club!',
+      '${newMember.name} joined the badminton club (${newMember.skillBadge})!',
       backgroundColor: const Color(0xFF1B5E20),
       colorText: Colors.white,
       duration: const Duration(seconds: 2),
@@ -231,6 +248,7 @@ class BadmintonController extends GetxController {
 
   void deleteMember(String id) {
     members.removeWhere((m) => m.id == id);
+    selectedPresentMemberIds.remove(id);
     // remove target ids from collections
     for (int i = 0; i < collections.length; i++) {
       if (collections[i].targetMemberIds.contains(id)) {
@@ -444,6 +462,7 @@ class BadmintonController extends GetxController {
         phone: '+91 98765 43210',
         colorValue: 0xFF1B5E20,
         joinedAt: now.subtract(const Duration(days: 30)),
+        skillLevel: 2, // Good Player
       ),
       Member(
         id: 'm2',
@@ -451,6 +470,7 @@ class BadmintonController extends GetxController {
         phone: '+91 98111 22233',
         colorValue: 0xFF0277BD,
         joinedAt: now.subtract(const Duration(days: 30)),
+        skillLevel: 1, // Regular
       ),
       Member(
         id: 'm3',
@@ -458,6 +478,7 @@ class BadmintonController extends GetxController {
         phone: '+91 97222 33344',
         colorValue: 0xFFD84315,
         joinedAt: now.subtract(const Duration(days: 28)),
+        skillLevel: 2, // Good Player
       ),
       Member(
         id: 'm4',
@@ -465,6 +486,7 @@ class BadmintonController extends GetxController {
         phone: '+91 96333 44455',
         colorValue: 0xFF4A148C,
         joinedAt: now.subtract(const Duration(days: 25)),
+        skillLevel: 1, // Regular
       ),
       Member(
         id: 'm5',
@@ -472,6 +494,7 @@ class BadmintonController extends GetxController {
         phone: '+91 95444 55566',
         colorValue: 0xFF00695C,
         joinedAt: now.subtract(const Duration(days: 20)),
+        skillLevel: 2, // Good Player
       ),
       Member(
         id: 'm6',
@@ -479,10 +502,28 @@ class BadmintonController extends GetxController {
         phone: '+91 94555 66677',
         colorValue: 0xFFC2185B,
         joinedAt: now.subtract(const Duration(days: 15)),
+        skillLevel: 1, // Regular
+      ),
+      Member(
+        id: 'm7',
+        name: 'Priya Verma',
+        phone: '+91 93666 77788',
+        colorValue: 0xFF283593,
+        joinedAt: now.subtract(const Duration(days: 10)),
+        skillLevel: 2, // Good Player
+      ),
+      Member(
+        id: 'm8',
+        name: 'Rohan Das',
+        phone: '+91 92777 88899',
+        colorValue: 0xFF4E342E,
+        joinedAt: now.subtract(const Duration(days: 5)),
+        skillLevel: 1, // Regular
       ),
     ];
 
     members.value = sampleMembers;
+    selectedPresentMemberIds.assignAll(sampleMembers.map((m) => m.id));
 
     // A collection entry: 500 for Yonex Mavis 350 shuttles
     final sampleCollection = CollectionEvent(
@@ -490,7 +531,7 @@ class BadmintonController extends GetxController {
       title: 'New Shuttles (Yonex Mavis 350 Box)',
       amountPerMember: 500,
       notes: 'Monthly shuttle pool - 6 tubes',
-      targetMemberIds: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'],
+      targetMemberIds: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8'],
       createdAt: now.subtract(const Duration(days: 3)),
       shuttleBrand: 'Yonex Mavis 350',
     );
@@ -543,5 +584,215 @@ class BadmintonController extends GetxController {
       'Reset Complete',
       'Sample badminton data restored.',
     );
+  }
+
+  // MARK: - Matchmaking Methods
+
+  void toggleMemberAttendance(String id) {
+    if (selectedPresentMemberIds.contains(id)) {
+      selectedPresentMemberIds.remove(id);
+    } else {
+      selectedPresentMemberIds.add(id);
+    }
+  }
+
+  void selectAllAttendance(bool selectAll) {
+    if (selectAll) {
+      selectedPresentMemberIds.assignAll(
+          members.where((m) => m.isActive).map((m) => m.id));
+    } else {
+      selectedPresentMemberIds.clear();
+    }
+  }
+
+  void updateMemberSkill(String id, int skillLevel) {
+    final idx = members.indexWhere((m) => m.id == id);
+    if (idx != -1) {
+      members[idx] = members[idx].copyWith(skillLevel: skillLevel);
+      saveToStorage();
+      if (currentMatchRound.value != null) {
+        generateBalancedMatches(isNextRound: false, showNotice: false);
+      }
+    }
+  }
+
+  /// Generate Balanced Doubles Matches in sets of 2
+  void generateBalancedMatches({bool isNextRound = false, bool showNotice = true}) {
+    final presentPlayers = members
+        .where((m) => selectedPresentMemberIds.contains(m.id))
+        .toList();
+
+    if (presentPlayers.length < 4) {
+      if (showNotice) {
+        _showSnackbar(
+          'Need At Least 4 Players',
+          'Please select at least 4 present players using the checkboxes to create balanced sets of 2 (doubles).',
+          backgroundColor: Colors.orange.shade800,
+          colorText: Colors.white,
+        );
+      }
+      return;
+    }
+
+    if (isNextRound) {
+      matchRoundNumber.value++;
+    }
+
+    final roundNum = matchRoundNumber.value;
+    final int courtsCount = presentPlayers.length ~/ 4;
+    final int activeCount = courtsCount * 4;
+    final int restingCount = presentPlayers.length - activeCount;
+
+    // Prioritize rotation for resting players:
+    // Players who rested in the last round will be guaranteed to play in this round.
+    List<Member> activeList = [];
+    List<Member> restingList = [];
+
+    if (restingCount > 0) {
+      final sortedForRotation = List<Member>.from(presentPlayers);
+      sortedForRotation.sort((a, b) {
+        final aRested = lastRestedMemberIds.contains(a.id) ? 0 : 1;
+        final bRested = lastRestedMemberIds.contains(b.id) ? 0 : 1;
+        return aRested.compareTo(bRested);
+      });
+
+      activeList = sortedForRotation.sublist(0, activeCount);
+      restingList = sortedForRotation.sublist(activeCount);
+      lastRestedMemberIds.value = restingList.map((m) => m.id).toList();
+    } else {
+      activeList = List<Member>.from(presentPlayers);
+      restingList = [];
+      lastRestedMemberIds.clear();
+    }
+
+    // Balance active players into `courtsCount` matches of 2 vs 2!
+    final matches = _findBestBalancedMatches(activeList, courtsCount);
+
+    currentMatchRound.value = MatchRound(
+      roundNumber: roundNum,
+      matches: matches,
+      restingPlayers: restingList,
+    );
+
+    if (showNotice) {
+      _showSnackbar(
+        'Matches Generated! 🏸',
+        'Set $roundNum ready with ${matches.length} balanced court${matches.length > 1 ? 's' : ''} in sets of 2.',
+        backgroundColor: const Color(0xFF0F9D58),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+        icon: const Icon(Icons.sports_tennis, color: Colors.white),
+      );
+    }
+  }
+
+  /// Internal optimization to pair players into sets of 2 with minimal skill difference
+  List<BadmintonMatch> _findBestBalancedMatches(
+      List<Member> players, int courtsCount) {
+    if (courtsCount == 1) {
+      return [_findBestDoublesMatch(players, 1)];
+    }
+
+    // For multiple courts, run randomized local optimization over permutations
+    // to find the grouping of 4-player courts that produces the fairest games
+    List<BadmintonMatch> bestMatches = [];
+    int bestPenalty = 999999;
+    final random = Random();
+
+    for (int iter = 0; iter < 150; iter++) {
+      final shuffled = List<Member>.from(players)..shuffle(random);
+      int currentPenalty = 0;
+      List<BadmintonMatch> currentMatches = [];
+
+      for (int c = 0; c < courtsCount; c++) {
+        final groupOf4 = shuffled.sublist(c * 4, (c + 1) * 4);
+        final match = _findBestDoublesMatch(groupOf4, c + 1);
+        currentMatches.add(match);
+        currentPenalty += (match.skillDifference * 10);
+      }
+
+      if (currentPenalty < bestPenalty) {
+        bestPenalty = currentPenalty;
+        bestMatches = currentMatches;
+        if (bestPenalty == 0) break; // Found 0 difference across all courts!
+      }
+    }
+
+    return bestMatches;
+  }
+
+  /// Given 4 players, finds the most balanced 2 vs 2 doubles pairing
+  BadmintonMatch _findBestDoublesMatch(
+      List<Member> fourPlayers, int courtNumber) {
+    final p = fourPlayers;
+    // 3 possible pairings:
+    // Pairing 1: (p0, p1) vs (p2, p3)
+    // Pairing 2: (p0, p2) vs (p1, p3)
+    // Pairing 3: (p0, p3) vs (p1, p2)
+
+    final diff1 = ((p[0].skillLevel + p[1].skillLevel) -
+            (p[2].skillLevel + p[3].skillLevel))
+        .abs();
+    final diff2 = ((p[0].skillLevel + p[2].skillLevel) -
+            (p[1].skillLevel + p[3].skillLevel))
+        .abs();
+    final diff3 = ((p[0].skillLevel + p[3].skillLevel) -
+            (p[1].skillLevel + p[2].skillLevel))
+        .abs();
+
+    final minDiff = min(diff1, min(diff2, diff3));
+
+    List<BadmintonTeam> teams;
+    if (minDiff == diff3) {
+      teams = [
+        BadmintonTeam(name: 'Team A', players: [p[0], p[3]]),
+        BadmintonTeam(name: 'Team B', players: [p[1], p[2]]),
+      ];
+    } else if (minDiff == diff2) {
+      teams = [
+        BadmintonTeam(name: 'Team A', players: [p[0], p[2]]),
+        BadmintonTeam(name: 'Team B', players: [p[1], p[3]]),
+      ];
+    } else {
+      teams = [
+        BadmintonTeam(name: 'Team A', players: [p[0], p[1]]),
+        BadmintonTeam(name: 'Team B', players: [p[2], p[3]]),
+      ];
+    }
+
+    return BadmintonMatch(
+      courtNumber: courtNumber,
+      teamA: teams[0],
+      teamB: teams[1],
+    );
+  }
+
+  String generateMatchWhatsAppText() {
+    final round = currentMatchRound.value;
+    if (round == null || round.matches.isEmpty) return '';
+
+    final buffer = StringBuffer();
+    buffer.writeln(
+        '🏸 *BADMINTON TEAMS - GAME ${round.roundNumber}* 🏸');
+    buffer.writeln(
+        '👥 ${selectedPresentMemberIds.length} Players • ${round.matches.length} Court(s)');
+    buffer.writeln('-----------------------------------');
+
+    for (var match in round.matches) {
+      buffer.writeln('🏸 *COURT ${match.courtNumber} (2 vs 2):*');
+      buffer.writeln('🟢 Team 1: ${match.teamA.playerNames}');
+      buffer.writeln('   vs');
+      buffer.writeln('🔵 Team 2: ${match.teamB.playerNames}');
+      buffer.writeln('');
+    }
+
+    if (round.restingPlayers.isNotEmpty) {
+      buffer.writeln(
+          '⏳ *Resting this game:* ${round.restingPlayers.map((m) => m.name).join(', ')} (Plays next game!)');
+      buffer.writeln('-----------------------------------');
+    }
+
+    buffer.writeln('🏸 Play hard and have fun! 🔥');
+    return buffer.toString();
   }
 }

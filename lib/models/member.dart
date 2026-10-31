@@ -5,6 +5,7 @@ class Member {
   final int colorValue;
   final bool isActive;
   final DateTime joinedAt;
+  final int skillLevel; // 1: Regular / Plays Less, 2: Good Player / Plays Well
 
   Member({
     required this.id,
@@ -13,7 +14,13 @@ class Member {
     required this.colorValue,
     this.isActive = true,
     DateTime? joinedAt,
+    this.skillLevel = 1,
   }) : joinedAt = joinedAt ?? DateTime.now();
+
+  bool get isGoodPlayer => skillLevel >= 2;
+
+  String get skillName => isGoodPlayer ? 'Good Player' : 'Regular Player';
+  String get skillBadge => isGoodPlayer ? 'Good Player 🟢' : 'Regular 🟡';
 
   Member copyWith({
     String? id,
@@ -22,6 +29,7 @@ class Member {
     int? colorValue,
     bool? isActive,
     DateTime? joinedAt,
+    int? skillLevel,
   }) {
     return Member(
       id: id ?? this.id,
@@ -30,6 +38,7 @@ class Member {
       colorValue: colorValue ?? this.colorValue,
       isActive: isActive ?? this.isActive,
       joinedAt: joinedAt ?? this.joinedAt,
+      skillLevel: skillLevel ?? this.skillLevel,
     );
   }
 
@@ -41,6 +50,7 @@ class Member {
       'colorValue': colorValue,
       'isActive': isActive,
       'joinedAt': joinedAt.toIso8601String(),
+      'skillLevel': skillLevel,
     };
   }
 
@@ -54,7 +64,7 @@ class Member {
       joinedAt: map['joinedAt'] != null
           ? DateTime.parse(map['joinedAt'])
           : DateTime.now(),
+      skillLevel: map['skillLevel'] ?? 1,
     );
   }
 }
-

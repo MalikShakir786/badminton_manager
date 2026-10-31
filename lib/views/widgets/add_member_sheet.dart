@@ -14,6 +14,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
   final BadmintonController controller = Get.find<BadmintonController>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  int _skillLevel = 2; // 1: Beginner, 2: Intermediate, 3: Advanced, 4: Pro
 
   @override
   void dispose() {
@@ -38,6 +39,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
     controller.addMember(
       name: name,
       phone: _phoneController.text.trim(),
+      skillLevel: _skillLevel,
     );
 
     Get.back();
@@ -138,6 +140,37 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
               hintText: 'e.g. +91 98765 43210',
               prefixIcon: Icon(Icons.phone_outlined),
             ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'How well does this player play?',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: ChoiceChip(
+                  label: const Center(child: Text('🟢 Plays Well')),
+                  selected: _skillLevel == 2,
+                  selectedColor: Colors.green.shade100,
+                  onSelected: (val) => setState(() => _skillLevel = 2),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ChoiceChip(
+                  label: const Center(child: Text('🟡 Plays Less')),
+                  selected: _skillLevel == 1,
+                  selectedColor: Colors.amber.shade100,
+                  onSelected: (val) => setState(() => _skillLevel = 1),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           SizedBox(

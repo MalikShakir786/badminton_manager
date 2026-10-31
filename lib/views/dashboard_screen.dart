@@ -5,6 +5,7 @@ import '../models/member_balance.dart';
 import '../utils/app_theme.dart';
 import 'member_detail_screen.dart';
 import 'collections_screen.dart';
+import 'matchmaking_screen.dart';
 import 'history_screen.dart';
 import 'widgets/add_collection_sheet.dart';
 import 'widgets/add_member_sheet.dart';
@@ -26,10 +27,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: const [
-          _DashboardHomeTab(),
-          CollectionsScreen(),
-          HistoryScreen(),
+        children: [
+          _DashboardHomeTab(
+            onOpenMatchmaking: () => setState(() => _currentIndex = 1),
+          ),
+          const MatchmakingScreen(),
+          const CollectionsScreen(),
+          const HistoryScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -37,19 +41,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.group_outlined),
-            selectedIcon: Icon(Icons.group),
-            label: 'Players & Dues',
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            selectedIcon: Icon(Icons.account_balance_wallet),
+            label: 'Money & Dues',
           ),
           NavigationDestination(
             icon: Icon(Icons.sports_tennis_outlined),
             selectedIcon: Icon(Icons.sports_tennis),
-            label: 'Collections',
+            label: 'Make Teams',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2),
+            label: 'Shuttle Pool',
           ),
           NavigationDestination(
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long),
-            label: 'Ledger',
+            label: 'History',
           ),
         ],
       ),
@@ -58,7 +67,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class _DashboardHomeTab extends StatelessWidget {
-  const _DashboardHomeTab();
+  final VoidCallback onOpenMatchmaking;
+
+  const _DashboardHomeTab({required this.onOpenMatchmaking});
 
   @override
   Widget build(BuildContext context) {
@@ -363,30 +374,33 @@ class _DashboardHomeTab extends StatelessWidget {
                               label: const Text('Add Player'),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: () {
-                                Get.bottomSheet(
-                                  const ShareSummarySheet(),
-                                  isScrollControlled: true,
-                                );
-                              },
-                              icon: const Icon(
-                                Icons.share,
-                                size: 18,
+                              onPressed: onOpenMatchmaking,
+                              icon: const Icon(Icons.shuffle, size: 18, color: AppTheme.primaryGreen),
+                              label: const Text('Match Making'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton(
+                            onPressed: () {
+                              Get.bottomSheet(
+                                const ShareSummarySheet(),
+                                isScrollControlled: true,
+                              );
+                            },
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(
                                 color: Color(0xFF25D366),
+                                width: 1.5,
                               ),
-                              label: const Text(
-                                'WhatsApp',
-                                style: TextStyle(color: Color(0xFF1B5E20)),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                  color: Color(0xFF25D366),
-                                  width: 1.5,
-                                ),
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                            child: const Icon(
+                              Icons.share,
+                              size: 18,
+                              color: Color(0xFF25D366),
                             ),
                           ),
                         ],
@@ -606,13 +620,40 @@ class _DashboardHomeTab extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          member.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textDark,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                member.name,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textDark,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Text(
+                                member.skillBadge,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(

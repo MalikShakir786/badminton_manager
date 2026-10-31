@@ -95,7 +95,34 @@ class MemberDetailScreen extends StatelessWidget {
                                 ),
                               ),
                             const SizedBox(height: 6),
-                            _buildStatusPill(balance),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                _buildStatusPill(balance),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    member.skillBadge,
+                                    style: TextStyle(
+                                      color: Colors.grey.shade800,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -533,21 +560,48 @@ class MemberDetailScreen extends StatelessWidget {
   ) {
     final nameCtrl = TextEditingController(text: member.name);
     final phoneCtrl = TextEditingController(text: member.phone);
+    int selectedSkill = member.skillLevel;
 
     Get.defaultDialog(
       title: 'Edit Player',
-      content: Column(
-        children: [
-          TextField(
-            controller: nameCtrl,
-            decoration: const InputDecoration(labelText: 'Player Name'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: phoneCtrl,
-            decoration: const InputDecoration(labelText: 'Phone Number'),
-          ),
-        ],
+      content: StatefulBuilder(
+        builder: (context, setState) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Player Name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Phone Number'),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Skill Level (For Matchmaking):',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<int>(
+                initialValue: selectedSkill,
+                decoration: const InputDecoration(isDense: true),
+                items: const [
+                  DropdownMenuItem(value: 1, child: Text('⭐ Beginner / Less')),
+                  DropdownMenuItem(value: 2, child: Text('⭐⭐ Intermediate')),
+                  DropdownMenuItem(value: 3, child: Text('⭐⭐⭐ Advanced')),
+                  DropdownMenuItem(value: 4, child: Text('⭐⭐⭐⭐ Pro / Strong')),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => selectedSkill = val);
+                  }
+                },
+              ),
+            ],
+          );
+        },
       ),
       textConfirm: 'Save',
       textCancel: 'Cancel',
@@ -559,6 +613,7 @@ class MemberDetailScreen extends StatelessWidget {
             member.copyWith(
               name: nameCtrl.text.trim(),
               phone: phoneCtrl.text.trim(),
+              skillLevel: selectedSkill,
             ),
           );
           Get.back();
