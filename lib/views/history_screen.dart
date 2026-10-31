@@ -119,8 +119,8 @@ class HistoryScreen extends StatelessWidget {
                           confirmTextColor: Colors.white,
                           buttonColor: Colors.red,
                           onConfirm: () {
-                            controller.deletePayment(p.id);
                             Get.back();
+                            controller.deletePayment(p.id);
                           },
                         );
                       },

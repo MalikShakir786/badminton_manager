@@ -83,6 +83,9 @@ class _AddCollectionSheetState extends State<AddCollectionSheet> {
       return;
     }
 
+    // Close sheet first so it dismisses immediately
+    Navigator.of(context).pop();
+
     controller.addNewCollection(
       title: _titleController.text.trim(),
       amountPerMember: amount,
@@ -90,8 +93,6 @@ class _AddCollectionSheetState extends State<AddCollectionSheet> {
       notes: _notesController.text.trim(),
       shuttleBrand: _shuttleBrand,
     );
-
-    Get.back();
   }
 
   @override

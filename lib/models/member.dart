@@ -1,11 +1,17 @@
+import 'package:flutter/material.dart';
+
 class Member {
+  static const int skillPlayLess = 1;
+  static const int skillPlayMedium = 2;
+  static const int skillPlayGood = 3;
+
   final String id;
   final String name;
   final String phone;
   final int colorValue;
   final bool isActive;
   final DateTime joinedAt;
-  final int skillLevel; // 1: Regular / Plays Less, 2: Good Player / Plays Well
+  final int skillLevel; // 1: Play Less, 2: Play Medium, 3: Play Good
 
   Member({
     required this.id,
@@ -14,13 +20,60 @@ class Member {
     required this.colorValue,
     this.isActive = true,
     DateTime? joinedAt,
-    this.skillLevel = 1,
+    this.skillLevel = skillPlayMedium,
   }) : joinedAt = joinedAt ?? DateTime.now();
 
-  bool get isGoodPlayer => skillLevel >= 2;
+  bool get isGoodPlayer => skillLevel == skillPlayGood;
+  bool get isMediumPlayer => skillLevel == skillPlayMedium;
+  bool get isLessPlayer => skillLevel <= skillPlayLess;
 
-  String get skillName => isGoodPlayer ? 'Good Player' : 'Regular Player';
-  String get skillBadge => isGoodPlayer ? 'Good Player 🟢' : 'Regular 🟡';
+  String get skillName {
+    switch (skillLevel) {
+      case skillPlayGood:
+        return 'Play Good';
+      case skillPlayMedium:
+        return 'Play Medium';
+      case skillPlayLess:
+      default:
+        return 'Play Less';
+    }
+  }
+
+  String get skillBadge {
+    switch (skillLevel) {
+      case skillPlayGood:
+        return 'Play Good 🟢';
+      case skillPlayMedium:
+        return 'Play Medium 🔵';
+      case skillPlayLess:
+      default:
+        return 'Play Less 🟡';
+    }
+  }
+
+  Color get skillColor {
+    switch (skillLevel) {
+      case skillPlayGood:
+        return const Color(0xFF2E7D32); // Green
+      case skillPlayMedium:
+        return const Color(0xFF1976D2); // Blue
+      case skillPlayLess:
+      default:
+        return const Color(0xFFE65100); // Deep Orange / Amber
+    }
+  }
+
+  Color get skillBgColor {
+    switch (skillLevel) {
+      case skillPlayGood:
+        return const Color(0xFFE8F5E9); // Light Green
+      case skillPlayMedium:
+        return const Color(0xFFE3F2FD); // Light Blue
+      case skillPlayLess:
+      default:
+        return const Color(0xFFFFF3E0); // Light Amber
+    }
+  }
 
   Member copyWith({
     String? id,
@@ -64,7 +117,7 @@ class Member {
       joinedAt: map['joinedAt'] != null
           ? DateTime.parse(map['joinedAt'])
           : DateTime.now(),
-      skillLevel: map['skillLevel'] ?? 1,
+      skillLevel: map['skillLevel'] ?? skillPlayMedium,
     );
   }
 }

@@ -225,11 +225,10 @@ class _MatchmakingScreenState extends State<MatchmakingScreen> {
                                     ),
                                   ),
                                 ),
-                                // One-tap badge to toggle: Plays Well vs Plays Less
+                                // One-tap badge to cycle: Play Good -> Play Medium -> Play Less
                                 InkWell(
                                   onTap: () {
-                                    final next = m.isGoodPlayer ? 1 : 2;
-                                    controller.updateMemberSkill(m.id, next);
+                                    controller.cycleMemberSkillLevel(m.id);
                                   },
                                   borderRadius: BorderRadius.circular(10),
                                   child: Container(
@@ -238,36 +237,28 @@ class _MatchmakingScreenState extends State<MatchmakingScreen> {
                                       vertical: 3,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: m.isGoodPlayer
-                                          ? Colors.green.shade50
-                                          : Colors.amber.shade50,
+                                      color: m.skillBgColor,
                                       borderRadius: BorderRadius.circular(10),
                                       border: Border.all(
-                                        color: m.isGoodPlayer
-                                            ? Colors.green.shade300
-                                            : Colors.amber.shade300,
+                                        color: m.skillColor.withValues(alpha: 0.4),
                                       ),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
-                                          m.isGoodPlayer
-                                              ? '🟢 Plays Well'
-                                              : '🟡 Plays Less',
+                                          m.skillBadge,
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                            color: m.isGoodPlayer
-                                              ? Colors.green.shade800
-                                              : Colors.orange.shade900,
+                                            color: m.skillColor,
                                           ),
                                         ),
                                         const SizedBox(width: 2),
-                                        const Icon(
+                                        Icon(
                                           Icons.sync,
                                           size: 11,
-                                          color: Colors.grey,
+                                          color: m.skillColor,
                                         ),
                                       ],
                                     ),
@@ -450,7 +441,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Pairs 1 player who plays well with 1 regular player on each side so the match is fair and fun.\n\nCheck who is here and tap "Make Balanced Teams"!',
+                      'Balances teams across Play Good, Play Medium, and Play Less players so matches are fair and fun.\n\nCheck who is here and tap "Make Balanced Teams"!',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,
@@ -605,13 +596,11 @@ class _MatchmakingScreenState extends State<MatchmakingScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    p.isGoodPlayer ? '🟢 Plays Well' : '🟡 Plays Less',
+                    p.skillBadge,
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: p.isGoodPlayer
-                          ? Colors.green.shade800
-                          : Colors.orange.shade900,
+                      fontWeight: FontWeight.w600,
+                      color: p.skillColor,
                     ),
                   ),
                 ],

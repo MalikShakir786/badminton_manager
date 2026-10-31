@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:badminton_manager/controllers/badminton_controller.dart';
+import 'package:badminton_manager/models/member.dart';
 import 'package:badminton_manager/models/member_balance.dart';
 import 'package:badminton_manager/views/dashboard_screen.dart';
 import 'package:badminton_manager/utils/app_theme.dart';
@@ -15,18 +16,17 @@ void main() {
     final controller = BadmintonController();
     Get.put(controller);
 
-    // Initial sample data should be loaded
-    expect(controller.members.isNotEmpty, isTrue);
+    // Initial state should be completely clean (no dummy data)
+    expect(controller.members.isEmpty, isTrue);
 
-    // 1. Add new member with skill level
-    final initialCount = controller.members.length;
-    controller.addMember(name: 'Test Player', phone: '1234567890', skillLevel: 2);
-    expect(controller.members.length, equals(initialCount + 1));
+    // 1. Add new member with 3-tier skill level (3: Good, 2: Medium, 1: Less)
+    controller.addMember(name: 'Test Player', phone: '1234567890', skillLevel: Member.skillPlayGood);
+    expect(controller.members.length, equals(1));
     final newMember = controller.members.last;
-    expect(newMember.skillLevel, equals(2));
+    expect(newMember.skillLevel, equals(Member.skillPlayGood));
+    expect(newMember.skillBadge, equals('Play Good 🟢'));
 
     // 2. Add a new 500 collection entry
-    // "whenever we enter a new entry like we have to collect new 500 then we add the new 500 entry and it added to all membvers remainings"
     controller.addNewCollection(
       title: 'New Shuttles Test Pool',
       amountPerMember: 500,
@@ -41,7 +41,6 @@ void main() {
     expect(balance1.status, equals(MemberPaymentStatus.unpaid));
 
     // 3. Partial payment test: player pays 200, 300 remains
-    // "or we can get some amount and some amount remians in the remianings of that player"
     controller.recordPayment(
       memberId: newMember.id,
       amount: 200,
@@ -54,7 +53,6 @@ void main() {
     expect(balance2.status, equals(MemberPaymentStatus.partial));
 
     // 4. One-tap Check / Settle remaining due
-    // "and when we collect we make them check"
     controller.quickSettleMember(newMember.id);
 
     MemberBalance balance3 = controller.getBalanceForMember(newMember.id);
@@ -82,18 +80,24 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
   });
 
-  testWidgets('Balanced Matchmaking in sets of 2 with attendance checkboxes and resting rotation', (WidgetTester tester) async {
+  testWidgets('Balanced Matchmaking with 3 skill levels (Good, Medium, Less) and resting rotation', (WidgetTester tester) async {
     final controller = BadmintonController();
     Get.put(controller);
 
-    // Initial 8 sample members loaded
-    expect(controller.members.length, greaterThanOrEqualTo(8));
+    // Setup 6 players: 2 Good (3), 2 Medium (2), 2 Less (1)
+    controller.addMember(name: 'Good Player 1', skillLevel: Member.skillPlayGood);
+    controller.addMember(name: 'Good Player 2', skillLevel: Member.skillPlayGood);
+    controller.addMember(name: 'Med Player 1', skillLevel: Member.skillPlayMedium);
+    controller.addMember(name: 'Med Player 2', skillLevel: Member.skillPlayMedium);
+    controller.addMember(name: 'Less Player 1', skillLevel: Member.skillPlayLess);
+    controller.addMember(name: 'Less Player 2', skillLevel: Member.skillPlayLess);
+    expect(controller.members.length, equals(6));
 
-    // 1. Test with 4 players: 2 Good Players (2) + 2 Regular Players (1)
-    final p1 = controller.members.firstWhere((m) => m.skillLevel == 2);
-    final p2 = controller.members.where((m) => m.skillLevel == 2).skip(1).first;
-    final p3 = controller.members.firstWhere((m) => m.skillLevel == 1);
-    final p4 = controller.members.where((m) => m.skillLevel == 1).skip(1).first;
+    // 1. Test 4 players on 1 court: Good (3) + Good (3) + Less (1) + Less (1)
+    final p1 = controller.members[0]; // Good (3)
+    final p2 = controller.members[1]; // Good (3)
+    final p3 = controller.members[4]; // Less (1)
+    final p4 = controller.members[5]; // Less (1)
 
     // Select only these 4 players present (others absent via checkboxes)
     controller.selectedPresentMemberIds.assignAll([p1.id, p2.id, p3.id, p4.id]);
@@ -105,20 +109,27 @@ void main() {
     expect(round1.restingPlayers.isEmpty, isTrue);
 
     final match = round1.matches.first;
-    // Verify each team has a set of 2 players
     expect(match.teamA.players.length, equals(2));
     expect(match.teamB.players.length, equals(2));
 
-    // (Good + Regular = 3) vs (Good + Regular = 3)
-    // Team A and Team B should be perfectly balanced with difference 0!
-    expect(match.teamA.totalSkill, equals(3));
-    expect(match.teamB.totalSkill, equals(3));
+    // (Good + Less = 4) vs (Good + Less = 4) -> Diff = 0
+    expect(match.teamA.totalSkill, equals(4));
+    expect(match.teamB.totalSkill, equals(4));
     expect(match.skillDifference, equals(0));
     expect(match.isPerfectMatch, isTrue);
 
-    // 2. Test with 6 players (4 playing on Court 1, 2 resting)
-    final sixPlayerIds = controller.members.take(6).map((m) => m.id).toList();
-    controller.selectedPresentMemberIds.assignAll(sixPlayerIds);
+    // 2. Test cycleMemberSkillLevel: Good(3) -> Medium(2) -> Less(1) -> Good(3)
+    controller.cycleMemberSkillLevel(p1.id);
+    expect(controller.members.firstWhere((m) => m.id == p1.id).skillLevel, equals(Member.skillPlayMedium));
+
+    controller.cycleMemberSkillLevel(p1.id);
+    expect(controller.members.firstWhere((m) => m.id == p1.id).skillLevel, equals(Member.skillPlayLess));
+
+    controller.cycleMemberSkillLevel(p1.id);
+    expect(controller.members.firstWhere((m) => m.id == p1.id).skillLevel, equals(Member.skillPlayGood));
+
+    // 3. Test with all 6 players (4 playing on Court 1, 2 resting)
+    controller.selectedPresentMemberIds.assignAll(controller.members.map((m) => m.id));
 
     controller.generateBalancedMatches(isNextRound: false, showNotice: false);
     final round6p = controller.currentMatchRound.value;
@@ -127,7 +138,7 @@ void main() {
 
     final restedNames = round6p.restingPlayers.map((m) => m.id).toList();
 
-    // 3. Test Next Round / Set rotation: Resting players MUST play in the next round
+    // 4. Test Next Round / Set rotation: Resting players MUST play in the next round
     controller.generateBalancedMatches(isNextRound: true, showNotice: false);
     final roundNext = controller.currentMatchRound.value;
     expect(roundNext!.roundNumber, equals(2));
@@ -139,7 +150,7 @@ void main() {
       expect(activeInNextIds.contains(restedId), isTrue);
     }
 
-    // 4. Test WhatsApp Lineup Text
+    // 5. Test WhatsApp Lineup Text
     final lineupText = controller.generateMatchWhatsAppText();
     expect(lineupText.contains('BADMINTON TEAMS'), isTrue);
     expect(lineupText.contains('COURT 1'), isTrue);
@@ -153,7 +164,6 @@ void main() {
     final controller = BadmintonController();
     Get.put(controller);
 
-    // Reset payments & purchases to test exact numbers from user request
     controller.payments.clear();
     controller.shuttlePurchases.clear();
     controller.shuttlesUsed.value = 0;
@@ -166,14 +176,13 @@ void main() {
     expect(controller.currentShuttleStock, equals(0));
 
     // 2. Buy 2 shuttles for 700
-    // "means if we have collected the thousand and get 2 shuttles for 700 then it must show in the shuttles section that these is total amount remaining"
+    // 700 is deducted from collected 1000 -> remaining kitty is 300!
     controller.recordShuttlePurchase(
       title: 'Yonex Mavis 350',
       quantity: 2,
       totalCost: 700.0,
     );
 
-    // Verify 700 is deducted from collected 1000 -> remaining kitty is 300!
     expect(controller.totalSpentOnShuttles, equals(700.0));
     expect(controller.kittyBalanceRemaining, equals(300.0));
     expect(controller.totalShuttlesStockBought, equals(2));
@@ -192,7 +201,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
   });
 
-  testWidgets('Dashboard UI renders correctly with players, matchmaking navigation and buttons', (WidgetTester tester) async {
+  testWidgets('Dashboard UI renders correctly with empty and populated states', (WidgetTester tester) async {
     final controller = BadmintonController();
     Get.put(controller);
 
@@ -209,9 +218,6 @@ void main() {
     expect(find.text('Badminton Kitty'), findsOneWidget);
     expect(find.text('PENDING DUE'), findsOneWidget);
     expect(find.text('TOTAL COLLECTED'), findsOneWidget);
-
-    // Verify Action button for 500 shuttle entry
-    expect(find.textContaining('Add Shuttle Collection (+ ₹500 to All)'), findsOneWidget);
 
     // Verify Navigation Bar items
     expect(find.text('Money & Dues'), findsOneWidget);

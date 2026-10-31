@@ -349,8 +349,8 @@ class MemberDetailScreen extends StatelessWidget {
                               confirmTextColor: Colors.white,
                               buttonColor: Colors.red,
                               onConfirm: () {
-                                controller.deletePayment(p.id);
                                 Get.back();
+                                controller.deletePayment(p.id);
                               },
                             );
                           },
@@ -588,10 +588,18 @@ class MemberDetailScreen extends StatelessWidget {
                 initialValue: selectedSkill,
                 decoration: const InputDecoration(isDense: true),
                 items: const [
-                  DropdownMenuItem(value: 1, child: Text('⭐ Beginner / Less')),
-                  DropdownMenuItem(value: 2, child: Text('⭐⭐ Intermediate')),
-                  DropdownMenuItem(value: 3, child: Text('⭐⭐⭐ Advanced')),
-                  DropdownMenuItem(value: 4, child: Text('⭐⭐⭐⭐ Pro / Strong')),
+                  DropdownMenuItem(
+                    value: Member.skillPlayGood,
+                    child: Text('🟢 Play Good'),
+                  ),
+                  DropdownMenuItem(
+                    value: Member.skillPlayMedium,
+                    child: Text('🔵 Play Medium'),
+                  ),
+                  DropdownMenuItem(
+                    value: Member.skillPlayLess,
+                    child: Text('🟡 Play Less'),
+                  ),
                 ],
                 onChanged: (val) {
                   if (val != null) {
@@ -609,6 +617,7 @@ class MemberDetailScreen extends StatelessWidget {
       buttonColor: AppTheme.primaryGreen,
       onConfirm: () {
         if (nameCtrl.text.trim().isNotEmpty) {
+          Get.back();
           controller.updateMember(
             member.copyWith(
               name: nameCtrl.text.trim(),
@@ -616,7 +625,6 @@ class MemberDetailScreen extends StatelessWidget {
               skillLevel: selectedSkill,
             ),
           );
-          Get.back();
         }
       },
     );
@@ -636,9 +644,9 @@ class MemberDetailScreen extends StatelessWidget {
       confirmTextColor: Colors.white,
       buttonColor: Colors.red,
       onConfirm: () {
-        controller.deleteMember(member.id);
         Get.back(); // close dialog
         Get.back(); // leave detail screen
+        controller.deleteMember(member.id);
       },
     );
   }

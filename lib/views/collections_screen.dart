@@ -442,8 +442,8 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
                   confirmTextColor: Colors.white,
                   buttonColor: Colors.red,
                   onConfirm: () {
-                    controller.deleteShuttlePurchase(p.id);
                     Get.back();
+                    controller.deleteShuttlePurchase(p.id);
                   },
                 );
               },
@@ -508,8 +508,8 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
                   confirmTextColor: Colors.white,
                   buttonColor: Colors.red,
                   onConfirm: () {
-                    controller.deleteCollection(col.id);
                     Get.back();
+                    controller.deleteCollection(col.id);
                   },
                 );
               },

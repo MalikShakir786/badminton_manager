@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/badminton_controller.dart';
+import '../../models/member.dart';
 import '../../utils/app_theme.dart';
 
 class AddMemberSheet extends StatefulWidget {
@@ -14,7 +15,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
   final BadmintonController controller = Get.find<BadmintonController>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  int _skillLevel = 2; // 1: Beginner, 2: Intermediate, 3: Advanced, 4: Pro
+  int _skillLevel = Member.skillPlayGood; // 3: Play Good, 2: Play Medium, 1: Play Less
 
   @override
   void dispose() {
@@ -36,13 +37,14 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       return;
     }
 
+    // Close the sheet first so no dialog/sheet remains open
+    Navigator.of(context).pop();
+
     controller.addMember(
       name: name,
       phone: _phoneController.text.trim(),
       skillLevel: _skillLevel,
     );
-
-    Get.back();
   }
 
   @override
@@ -155,19 +157,43 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
             children: [
               Expanded(
                 child: ChoiceChip(
-                  label: const Center(child: Text('🟢 Plays Well')),
-                  selected: _skillLevel == 2,
+                  label: const Center(
+                    child: Text(
+                      '🟢 Play Good',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  selected: _skillLevel == Member.skillPlayGood,
                   selectedColor: Colors.green.shade100,
-                  onSelected: (val) => setState(() => _skillLevel = 2),
+                  onSelected: (val) => setState(() => _skillLevel = Member.skillPlayGood),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 6),
               Expanded(
                 child: ChoiceChip(
-                  label: const Center(child: Text('🟡 Plays Less')),
-                  selected: _skillLevel == 1,
+                  label: const Center(
+                    child: Text(
+                      '🔵 Play Med',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  selected: _skillLevel == Member.skillPlayMedium,
+                  selectedColor: Colors.blue.shade100,
+                  onSelected: (val) => setState(() => _skillLevel = Member.skillPlayMedium),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: ChoiceChip(
+                  label: const Center(
+                    child: Text(
+                      '🟡 Play Less',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  selected: _skillLevel == Member.skillPlayLess,
                   selectedColor: Colors.amber.shade100,
-                  onSelected: (val) => setState(() => _skillLevel = 1),
+                  onSelected: (val) => setState(() => _skillLevel = Member.skillPlayLess),
                 ),
               ),
             ],

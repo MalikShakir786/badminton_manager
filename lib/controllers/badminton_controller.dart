@@ -101,10 +101,12 @@ class BadmintonController extends GetxController {
       currencySymbol.value = _storage.read<String>('currencySymbol') ?? '₹';
 
       final membersJson = _storage.read<List>('members');
-      if (membersJson != null && membersJson.isNotEmpty) {
+      if (membersJson != null) {
         members.value = membersJson
             .map((m) => Member.fromMap(Map<String, dynamic>.from(m)))
             .toList();
+      } else {
+        members.clear();
       }
 
       final collectionsJson = _storage.read<List>('collections');
@@ -112,6 +114,8 @@ class BadmintonController extends GetxController {
         collections.value = collectionsJson
             .map((c) => CollectionEvent.fromMap(Map<String, dynamic>.from(c)))
             .toList();
+      } else {
+        collections.clear();
       }
 
       final paymentsJson = _storage.read<List>('payments');
@@ -119,6 +123,8 @@ class BadmintonController extends GetxController {
         payments.value = paymentsJson
             .map((p) => PaymentRecord.fromMap(Map<String, dynamic>.from(p)))
             .toList();
+      } else {
+        payments.clear();
       }
 
       final purchasesJson = _storage.read<List>('shuttlePurchases');
@@ -126,6 +132,8 @@ class BadmintonController extends GetxController {
         shuttlePurchases.value = purchasesJson
             .map((p) => ShuttlePurchase.fromMap(Map<String, dynamic>.from(p)))
             .toList();
+      } else {
+        shuttlePurchases.clear();
       }
 
       shuttlesUsed.value = _storage.read<int>('shuttlesUsed') ?? 0;
@@ -133,9 +141,29 @@ class BadmintonController extends GetxController {
       debugPrint('Storage load error: $e');
     }
 
-    // If completely first launch, load rich sample data
-    if (members.isEmpty) {
-      loadInitialSampleData();
+    // Clean out any lingering dummy sample records so user data is clean
+    const dummyMemberIds = {'m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8'};
+    const dummyCollectionIds = {'c1'};
+    const dummyPaymentIds = {'p1', 'p2', 'p3', 'p4', 'p5'};
+    const dummyPurchaseIds = {'sp1'};
+
+    final hadDummyMembers = members.any((m) => dummyMemberIds.contains(m.id));
+    final hadDummyCollections =
+        collections.any((c) => dummyCollectionIds.contains(c.id));
+    final hadDummyPayments =
+        payments.any((p) => dummyPaymentIds.contains(p.id));
+    final hadDummyPurchases =
+        shuttlePurchases.any((p) => dummyPurchaseIds.contains(p.id));
+
+    if (hadDummyMembers ||
+        hadDummyCollections ||
+        hadDummyPayments ||
+        hadDummyPurchases) {
+      members.removeWhere((m) => dummyMemberIds.contains(m.id));
+      collections.removeWhere((c) => dummyCollectionIds.contains(c.id));
+      payments.removeWhere((p) => dummyPaymentIds.contains(p.id));
+      shuttlePurchases.removeWhere((p) => dummyPurchaseIds.contains(p.id));
+      saveToStorage();
     }
 
     // Default all active members to present for matchmaking
@@ -250,6 +278,9 @@ class BadmintonController extends GetxController {
   int get settledMembersCount =>
       allMemberBalances.where((b) => b.remainingDue <= 0).length;
 
+  String _generateId(String prefix) =>
+      '${prefix}_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(999999)}';
+
   // MARK: - Member Operations
   void addMember({
     required String name,
@@ -258,7 +289,7 @@ class BadmintonController extends GetxController {
   }) {
     final randomColor = avatarColors[Random().nextInt(avatarColors.length)];
     final newMember = Member(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: _generateId('m'),
       name: name.trim(),
       phone: phone.trim(),
       colorValue: randomColor,
@@ -317,7 +348,7 @@ class BadmintonController extends GetxController {
         members.where((m) => m.isActive).map((m) => m.id).toList();
 
     final newCollection = CollectionEvent(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: _generateId('c'),
       title: title.trim(),
       amountPerMember: amountPerMember,
       notes: notes.trim(),
@@ -364,7 +395,7 @@ class BadmintonController extends GetxController {
 
     final amountToPay = balance.remainingDue;
     final payment = PaymentRecord(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: _generateId('p'),
       memberId: memberId,
       amount: amountToPay,
       date: DateTime.now(),
@@ -399,7 +430,7 @@ class BadmintonController extends GetxController {
     final memberName = member?.name ?? 'Player';
 
     final payment = PaymentRecord(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: _generateId('p'),
       memberId: memberId,
       amount: amount,
       date: DateTime.now(),
@@ -494,153 +525,22 @@ class BadmintonController extends GetxController {
     return buffer.toString();
   }
 
-  // MARK: - Initial Sample Data
-  void loadInitialSampleData() {
-    final now = DateTime.now();
-
-    final sampleMembers = [
-      Member(
-        id: 'm1',
-        name: 'Rahul Sharma',
-        phone: '+91 98765 43210',
-        colorValue: 0xFF1B5E20,
-        joinedAt: now.subtract(const Duration(days: 30)),
-        skillLevel: 2, // Good Player
-      ),
-      Member(
-        id: 'm2',
-        name: 'Amit Patel',
-        phone: '+91 98111 22233',
-        colorValue: 0xFF0277BD,
-        joinedAt: now.subtract(const Duration(days: 30)),
-        skillLevel: 1, // Regular
-      ),
-      Member(
-        id: 'm3',
-        name: 'Vikram Singh',
-        phone: '+91 97222 33344',
-        colorValue: 0xFFD84315,
-        joinedAt: now.subtract(const Duration(days: 28)),
-        skillLevel: 2, // Good Player
-      ),
-      Member(
-        id: 'm4',
-        name: 'Alex Johnson',
-        phone: '+91 96333 44455',
-        colorValue: 0xFF4A148C,
-        joinedAt: now.subtract(const Duration(days: 25)),
-        skillLevel: 1, // Regular
-      ),
-      Member(
-        id: 'm5',
-        name: 'David Miller',
-        phone: '+91 95444 55566',
-        colorValue: 0xFF00695C,
-        joinedAt: now.subtract(const Duration(days: 20)),
-        skillLevel: 2, // Good Player
-      ),
-      Member(
-        id: 'm6',
-        name: 'Suresh Kumar',
-        phone: '+91 94555 66677',
-        colorValue: 0xFFC2185B,
-        joinedAt: now.subtract(const Duration(days: 15)),
-        skillLevel: 1, // Regular
-      ),
-      Member(
-        id: 'm7',
-        name: 'Priya Verma',
-        phone: '+91 93666 77788',
-        colorValue: 0xFF283593,
-        joinedAt: now.subtract(const Duration(days: 10)),
-        skillLevel: 2, // Good Player
-      ),
-      Member(
-        id: 'm8',
-        name: 'Rohan Das',
-        phone: '+91 92777 88899',
-        colorValue: 0xFF4E342E,
-        joinedAt: now.subtract(const Duration(days: 5)),
-        skillLevel: 1, // Regular
-      ),
-    ];
-
-    members.value = sampleMembers;
-    selectedPresentMemberIds.assignAll(sampleMembers.map((m) => m.id));
-
-    // A collection entry: 500 for Yonex Mavis 350 shuttles
-    final sampleCollection = CollectionEvent(
-      id: 'c1',
-      title: 'New Shuttles (Yonex Mavis 350)',
-      amountPerMember: 500,
-      notes: 'Monthly shuttle pool - 6 shuttles',
-      targetMemberIds: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8'],
-      createdAt: now.subtract(const Duration(days: 3)),
-      shuttleBrand: 'Yonex Mavis 350',
-    );
-
-    collections.value = [sampleCollection];
-
-    // Some members have paid full (checked), some partial, some haven't paid yet!
-    final samplePayments = [
-      PaymentRecord(
-        id: 'p1',
-        memberId: 'm1',
-        amount: 500, // Rahul paid in full (Checked)
-        date: now.subtract(const Duration(days: 2)),
-        paymentMethod: 'UPI / GPay',
-        notes: 'Full payment',
-        collectionEventId: 'c1',
-      ),
-      PaymentRecord(
-        id: 'p2',
-        memberId: 'm2',
-        amount: 250, // Amit paid partial 250 (250 remains)
-        date: now.subtract(const Duration(days: 1)),
-        paymentMethod: 'Cash',
-        notes: 'Gave 250 cash at court, 250 remaining',
-        collectionEventId: 'c1',
-      ),
-      PaymentRecord(
-        id: 'p3',
-        memberId: 'm4',
-        amount: 500, // Alex paid in full
-        date: now.subtract(const Duration(hours: 12)),
-        paymentMethod: 'UPI / Online',
-        notes: 'GPay payment',
-        collectionEventId: 'c1',
-      ),
-      // Vikram (m3), David (m5), Suresh (m6) owe full 500
-    ];
-
-    payments.value = samplePayments;
-
-    // Sample shuttle purchase: 2 shuttles for 700 (matching user's example!)
-    final samplePurchase = ShuttlePurchase(
-      id: 'sp1',
-      title: 'Yonex Mavis 350 (2 shuttles)',
-      quantity: 2,
-      totalCost: 700,
-      date: now.subtract(const Duration(days: 2)),
-      notes: 'Bought for club games',
-    );
-    shuttlePurchases.value = [samplePurchase];
-    shuttlesUsed.value = 0;
-
-    saveToStorage();
-  }
-
-  void resetAllData() {
+  // MARK: - Data Management
+  void clearAllData() {
     members.clear();
     collections.clear();
     payments.clear();
     shuttlePurchases.clear();
     shuttlesUsed.value = 0;
+    selectedPresentMemberIds.clear();
+    currentMatchRound.value = null;
+    matchRoundNumber.value = 1;
+    lastRestedMemberIds.clear();
     _storage.erase();
-    loadInitialSampleData();
+    saveToStorage();
     _showSnackbar(
-      'Reset Complete',
-      'Sample badminton data restored.',
+      'All Data Cleared',
+      'The group data is now completely fresh and clean.',
     );
   }
 
@@ -652,7 +552,7 @@ class BadmintonController extends GetxController {
     String notes = '',
   }) {
     final purchase = ShuttlePurchase(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: _generateId('sp'),
       title: title.trim().isEmpty ? 'Badminton Shuttles' : title.trim(),
       quantity: quantity > 0 ? quantity : 1,
       totalCost: totalCost,
@@ -734,6 +634,23 @@ class BadmintonController extends GetxController {
       if (currentMatchRound.value != null) {
         generateBalancedMatches(isNextRound: false, showNotice: false);
       }
+    }
+  }
+
+  /// One-tap cycle between: Play Good (3) -> Play Medium (2) -> Play Less (1) -> Play Good (3)
+  void cycleMemberSkillLevel(String id) {
+    final idx = members.indexWhere((m) => m.id == id);
+    if (idx != -1) {
+      final current = members[idx].skillLevel;
+      int next;
+      if (current == Member.skillPlayGood) {
+        next = Member.skillPlayMedium;
+      } else if (current == Member.skillPlayMedium) {
+        next = Member.skillPlayLess;
+      } else {
+        next = Member.skillPlayGood;
+      }
+      updateMemberSkill(id, next);
     }
   }
 

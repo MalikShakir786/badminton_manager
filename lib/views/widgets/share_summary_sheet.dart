@@ -101,7 +101,7 @@ class ShareSummarySheet extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: summaryText));
-                  Get.back();
+                  Navigator.of(context).pop();
                   Get.snackbar(
                     'Copied to Clipboard! 📋',
                     'You can now paste it into WhatsApp or any group chat.',

@@ -53,19 +53,22 @@ class _RecordPaymentSheetState extends State<RecordPaymentSheet> {
       return;
     }
 
+    // Close the sheet first so no dialog/sheet remains open
+    Navigator.of(context).pop();
+
     controller.recordPayment(
       memberId: widget.member.id,
       amount: amount,
       paymentMethod: _paymentMethod,
       notes: _notesController.text.trim(),
     );
-
-    Get.back();
   }
 
   void _markFullPayment() {
+    // Close the sheet first so no dialog/sheet remains open
+    Navigator.of(context).pop();
+
     controller.quickSettleMember(widget.member.id, method: _paymentMethod);
-    Get.back();
   }
 
   @override

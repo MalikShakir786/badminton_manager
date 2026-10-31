@@ -131,18 +131,18 @@ class _DashboardHomeTab extends StatelessWidget {
                   const AddMemberSheet(),
                   isScrollControlled: true,
                 );
-              } else if (val == 'reset') {
+              } else if (val == 'clear_all') {
                 Get.defaultDialog(
-                  title: 'Reset Data?',
+                  title: 'Clear All Data?',
                   middleText:
-                      'Restore sample badminton group data with players & collections?',
-                  textConfirm: 'Reset',
+                      'Remove all players, collections, and shuttle records to start completely clean?',
+                  textConfirm: 'Clear All',
                   textCancel: 'Cancel',
                   confirmTextColor: Colors.white,
                   buttonColor: Colors.red,
                   onConfirm: () {
-                    controller.resetAllData();
                     Get.back();
+                    controller.clearAllData();
                   },
                 );
               }
@@ -170,12 +170,12 @@ class _DashboardHomeTab extends StatelessWidget {
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(
-                value: 'reset',
+                value: 'clear_all',
                 child: Row(
                   children: [
-                    Icon(Icons.refresh, color: Colors.red, size: 20),
+                    Icon(Icons.delete_sweep_outlined, color: Colors.red, size: 20),
                     SizedBox(width: 8),
-                    Text('Restore Sample Data', style: TextStyle(color: Colors.red)),
+                    Text('Clear All Data', style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -702,16 +702,18 @@ class _DashboardHomeTab extends StatelessWidget {
                                 vertical: 1.5,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
+                                color: member.skillBgColor,
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(
+                                  color: member.skillColor.withValues(alpha: 0.3),
+                                ),
                               ),
                               child: Text(
                                 member.skillBadge,
                                 style: TextStyle(
                                   fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.bold,
+                                  color: member.skillColor,
                                 ),
                               ),
                             ),
@@ -911,8 +913,8 @@ class _DashboardHomeTab extends StatelessWidget {
             selected: isSelected,
             onSelected: (val) {
               if (val) {
-                controller.setCurrency(curr);
                 Get.back();
+                controller.setCurrency(curr);
               }
             },
           );

@@ -49,14 +49,15 @@ class _AddShuttlePurchaseSheetState extends State<AddShuttlePurchaseSheet> {
       return;
     }
 
+    // Close sheet first so no dialog/sheet remains open
+    Navigator.of(context).pop();
+
     controller.recordShuttlePurchase(
       title: _titleController.text.trim(),
       quantity: _quantity,
       totalCost: cost,
       notes: _notesController.text.trim(),
     );
-
-    Get.back();
   }
 
   @override
