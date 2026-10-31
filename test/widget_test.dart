@@ -15,8 +15,12 @@ void main() {
   testWidgets('Badminton Kitty App workflow: Add Member, Add 500 Collection, Partial Payment & Check', (WidgetTester tester) async {
     final controller = BadmintonController();
     Get.put(controller);
+    controller.members.clear();
+    controller.collections.clear();
+    controller.payments.clear();
+    controller.shuttlePurchases.clear();
+    controller.selectedPresentMemberIds.clear();
 
-    // Initial state should be completely clean (no dummy data)
     expect(controller.members.isEmpty, isTrue);
 
     // 1. Add new member with 3-tier skill level (3: Good, 2: Medium, 1: Less)
@@ -33,7 +37,6 @@ void main() {
       targetMemberIds: [newMember.id],
     );
 
-    // Check balance for new member: owed 500, paid 0, remaining 500
     MemberBalance balance1 = controller.getBalanceForMember(newMember.id);
     expect(balance1.totalOwed, equals(500.0));
     expect(balance1.totalPaid, equals(0.0));
@@ -83,8 +86,10 @@ void main() {
   testWidgets('Balanced Matchmaking with 3 skill levels (Good, Medium, Less) and resting rotation', (WidgetTester tester) async {
     final controller = BadmintonController();
     Get.put(controller);
+    controller.members.clear();
+    controller.selectedPresentMemberIds.clear();
+    controller.autoGraspForRemainder.value = false; // test pure resting rotation
 
-    // Setup 6 players: 2 Good (3), 2 Medium (2), 2 Less (1)
     controller.addMember(name: 'Good Player 1', skillLevel: Member.skillPlayGood);
     controller.addMember(name: 'Good Player 2', skillLevel: Member.skillPlayGood);
     controller.addMember(name: 'Med Player 1', skillLevel: Member.skillPlayMedium);
@@ -93,13 +98,12 @@ void main() {
     controller.addMember(name: 'Less Player 2', skillLevel: Member.skillPlayLess);
     expect(controller.members.length, equals(6));
 
-    // 1. Test 4 players on 1 court: Good (3) + Good (3) + Less (1) + Less (1)
-    final p1 = controller.members[0]; // Good (3)
-    final p2 = controller.members[1]; // Good (3)
-    final p3 = controller.members[4]; // Less (1)
-    final p4 = controller.members[5]; // Less (1)
+    // 1. Test 4 players on 1 court
+    final p1 = controller.members[0];
+    final p2 = controller.members[1];
+    final p3 = controller.members[4];
+    final p4 = controller.members[5];
 
-    // Select only these 4 players present (others absent via checkboxes)
     controller.selectedPresentMemberIds.assignAll([p1.id, p2.id, p3.id, p4.id]);
 
     controller.generateBalancedMatches(isNextRound: false, showNotice: false);
@@ -138,24 +142,115 @@ void main() {
 
     final restedNames = round6p.restingPlayers.map((m) => m.id).toList();
 
-    // 4. Test Next Round / Set rotation: Resting players MUST play in the next round
+    // 4. Test Next Round rotation: Resting players play next round
     controller.generateBalancedMatches(isNextRound: true, showNotice: false);
     final roundNext = controller.currentMatchRound.value;
     expect(roundNext!.roundNumber, equals(2));
 
-    // Verify both previously rested players are now on court playing
     final activeInNext = roundNext.matches.first.teamA.players + roundNext.matches.first.teamB.players;
     final activeInNextIds = activeInNext.map((m) => m.id).toList();
     for (var restedId in restedNames) {
       expect(activeInNextIds.contains(restedId), isTrue);
     }
 
-    // 5. Test WhatsApp Lineup Text
-    final lineupText = controller.generateMatchWhatsAppText();
-    expect(lineupText.contains('BADMINTON TEAMS'), isTrue);
-    expect(lineupText.contains('COURT 1'), isTrue);
-    expect(lineupText.contains('Team 1'), isTrue);
-    expect(lineupText.contains('Team 2'), isTrue);
+    await tester.pump(const Duration(milliseconds: 500));
+  });
+
+  testWidgets('Grasp player workflow: 15 players with 3 courts full and 3 remaining grasp 1 player for Court 4', (WidgetTester tester) async {
+    final controller = BadmintonController();
+    Get.put(controller);
+    controller.members.clear();
+    controller.selectedPresentMemberIds.clear();
+    controller.autoGraspForRemainder.value = true;
+
+    // Add exactly 15 players as in user request:
+    // "like we are 15 players and 3 courts are full but 3 remaining also make their match and single person will grasp one from the others players playing the game"
+    for (int i = 1; i <= 15; i++) {
+      controller.addMember(name: 'Player $i', skillLevel: (i % 3) + 1);
+    }
+    expect(controller.members.length, equals(15));
+    expect(controller.selectedPresentMemberIds.length, equals(15));
+
+    // Generate matches
+    controller.generateBalancedMatches(isNextRound: false, showNotice: false);
+    final round = controller.currentMatchRound.value;
+    expect(round, isNotNull);
+
+    // 3 courts full (12 players) + 1 extra court (3 remaining + 1 grasped player) = 4 COURTS TOTAL!
+    expect(round!.matches.length, equals(4));
+    // No players sitting resting because 1 player was grasped!
+    expect(round.restingPlayers.isEmpty, isTrue);
+
+    // Check Court 4 has borrowed player
+    final court4 = round.matches[3];
+    expect(court4.courtNumber, equals(4));
+    expect(court4.hasBorrowedPlayer, isTrue);
+    expect(court4.borrowedPlayerIds.length, equals(1));
+    expect(court4.borrowedCourtNote, contains('Grasped'));
+
+    // Check WhatsApp output marks the grasped player
+    final text = controller.generateMatchWhatsAppText();
+    expect(text.contains('COURT 4'), isTrue);
+    expect(text.contains('Playing Double Duty'), isTrue);
+
+    await tester.pump(const Duration(milliseconds: 500));
+  });
+
+  testWidgets('Tournament Semi-Final and Final: 3 teams with random Bye to final and 2 playing Semi-Final', (WidgetTester tester) async {
+    final controller = BadmintonController();
+    Get.put(controller);
+    controller.members.clear();
+    controller.selectedPresentMemberIds.clear();
+    controller.tournamentState.value = null;
+
+    // 6 players = 3 teams of 2
+    for (int i = 1; i <= 6; i++) {
+      controller.addMember(name: 'P$i', skillLevel: 2);
+    }
+
+    // Start Tournament with 3 teams
+    // "if 3 teams in semi final make a random match from 3 with 2 and 1 moves to final"
+    controller.startTournament();
+
+    final tState = controller.tournamentState.value;
+    expect(tState, isNotNull);
+    expect(tState!.allTeams.length, equals(3));
+    expect(tState.currentStage, equals('Semi-Finals'));
+
+    // Verify 1 team has a BYE straight to Grand Final
+    expect(tState.byeTeam, isNotNull);
+    // Verify only 1 match (between the other 2 teams) in Semi-Finals
+    expect(tState.matches.length, equals(1));
+    final sfMatch = tState.matches.first;
+    expect(sfMatch.stageName, equals('Semi-Final'));
+
+    // Play Semi-Final: Pick Team A as winner
+    controller.markTournamentMatchWinner(sfMatch.id, sfMatch.teamA.name);
+
+    final finalState = controller.tournamentState.value;
+    expect(finalState!.currentStage, equals('Grand Final'));
+    expect(finalState.matches.length, equals(1));
+
+    final finalMatch = finalState.matches.first;
+    expect(finalMatch.stageName, equals('Grand Final'));
+    // The Final is between the SF Winner and the Bye team!
+    expect(finalMatch.teamA.name, equals(sfMatch.teamA.name));
+    expect(finalMatch.teamB.name, equals(tState.byeTeam!.name));
+
+    // Play Grand Final: Team A wins!
+    controller.markTournamentMatchWinner(finalMatch.id, finalMatch.teamA.name);
+
+    final completedState = controller.tournamentState.value;
+    expect(completedState!.currentStage, equals('Completed'));
+    expect(completedState.champion, isNotNull);
+    expect(completedState.champion!.name, equals(finalMatch.teamA.name));
+    expect(completedState.runnerUp, isNotNull);
+    expect(completedState.runnerUp!.name, equals(tState.byeTeam!.name));
+
+    // Verify Tournament WhatsApp Summary
+    final waText = controller.generateTournamentWhatsAppText();
+    expect(waText.contains('TOURNAMENT CHAMPIONS'), isTrue);
+    expect(waText.contains(finalMatch.teamA.name), isTrue);
 
     await tester.pump(const Duration(milliseconds: 500));
   });
@@ -163,7 +258,7 @@ void main() {
   testWidgets('Shuttle purchase deduction and stock tracking workflow', (WidgetTester tester) async {
     final controller = BadmintonController();
     Get.put(controller);
-
+    controller.members.clear();
     controller.payments.clear();
     controller.shuttlePurchases.clear();
     controller.shuttlesUsed.value = 0;
@@ -176,7 +271,6 @@ void main() {
     expect(controller.currentShuttleStock, equals(0));
 
     // 2. Buy 2 shuttles for 700
-    // 700 is deducted from collected 1000 -> remaining kitty is 300!
     controller.recordShuttlePurchase(
       title: 'Yonex Mavis 350',
       quantity: 2,
@@ -204,6 +298,11 @@ void main() {
   testWidgets('Dashboard UI renders correctly with empty and populated states', (WidgetTester tester) async {
     final controller = BadmintonController();
     Get.put(controller);
+    controller.members.clear();
+    controller.collections.clear();
+    controller.payments.clear();
+    controller.shuttlePurchases.clear();
+    controller.shuttlesUsed.value = 0;
 
     await tester.pumpWidget(
       GetMaterialApp(

@@ -23,7 +23,7 @@ class BadmintonController extends GetxController {
   final RxList<ShuttlePurchase> shuttlePurchases = <ShuttlePurchase>[].obs;
   final RxInt shuttlesUsed = 0.obs;
 
-  final RxString currencySymbol = '₹'.obs;
+  final RxString currencySymbol = 'Rs'.obs;
   final RxString searchQuery = ''.obs;
   final RxString filterStatus = 'all'.obs; // 'all', 'pending', 'settled'
 
@@ -32,6 +32,12 @@ class BadmintonController extends GetxController {
   final Rx<MatchRound?> currentMatchRound = Rx<MatchRound?>(null);
   final RxInt matchRoundNumber = 1.obs;
   final RxList<String> lastRestedMemberIds = <String>[].obs;
+  final RxBool autoGraspForRemainder = true.obs;
+  final RxList<String> lastGraspedMemberIds = <String>[].obs;
+
+  // Tournament State (Knockout, Semi-Finals, Grand Final)
+  final Rx<TournamentState?> tournamentState = Rx<TournamentState?>(null);
+  final RxInt matchmakingModeIndex = 0.obs; // 0: Social Sets, 1: Tournament
 
   double get totalSpentOnShuttles {
     double sum = 0;
@@ -342,7 +348,7 @@ class BadmintonController extends GetxController {
     required double amountPerMember,
     List<String>? targetMemberIds,
     String notes = '',
-    String shuttleBrand = 'Yonex Mavis 350',
+    String shuttleBrand = 'Ghafoor Gold',
   }) {
     final targets = targetMemberIds ??
         members.where((m) => m.isActive).map((m) => m.id).toList();
@@ -536,6 +542,8 @@ class BadmintonController extends GetxController {
     currentMatchRound.value = null;
     matchRoundNumber.value = 1;
     lastRestedMemberIds.clear();
+    lastGraspedMemberIds.clear();
+    tournamentState.value = null;
     _storage.erase();
     saveToStorage();
     _showSnackbar(
@@ -681,30 +689,80 @@ class BadmintonController extends GetxController {
     final int activeCount = courtsCount * 4;
     final int restingCount = presentPlayers.length - activeCount;
 
-    // Prioritize rotation for resting players:
-    // Players who rested in the last round will be guaranteed to play in this round.
-    List<Member> activeList = [];
+    // Check if we should grasp / borrow players so remaining players can also play:
+    // e.g. 15 players = 3 courts (12 players) + 3 remaining.
+    // Grasp 1 player from active courts -> 4th court created! All 15 play!
+    final bool canGrasp = autoGraspForRemainder.value &&
+        courtsCount >= 1 &&
+        restingCount >= 2 &&
+        restingCount < 4;
+
+    List<BadmintonMatch> matches = [];
     List<Member> restingList = [];
 
-    if (restingCount > 0) {
-      final sortedForRotation = List<Member>.from(presentPlayers);
-      sortedForRotation.sort((a, b) {
-        final aRested = lastRestedMemberIds.contains(a.id) ? 0 : 1;
-        final bRested = lastRestedMemberIds.contains(b.id) ? 0 : 1;
-        return aRested.compareTo(bRested);
-      });
+    if (canGrasp) {
+      final borrowNeeded = 4 - restingCount; // e.g. 4 - 3 = 1 player needed
+      final primaryPlayers = presentPlayers.sublist(0, activeCount);
+      final remainderPlayers = presentPlayers.sublist(activeCount);
 
-      activeList = sortedForRotation.sublist(0, activeCount);
-      restingList = sortedForRotation.sublist(activeCount);
-      lastRestedMemberIds.value = restingList.map((m) => m.id).toList();
-    } else {
-      activeList = List<Member>.from(presentPlayers);
+      // Generate regular matches for the first activeCount players
+      matches = _findBestBalancedMatches(primaryPlayers, courtsCount);
+
+      // Select borrowNeeded players from primaryPlayers
+      // Prioritize players who were NOT grasped recently to rotate double duty
+      final candidates = List<Member>.from(primaryPlayers)
+        ..sort((a, b) {
+          final aGrasped = lastGraspedMemberIds.contains(a.id) ? 1 : 0;
+          final bGrasped = lastGraspedMemberIds.contains(b.id) ? 1 : 0;
+          return aGrasped.compareTo(bGrasped);
+        });
+
+      final grasped = candidates.take(borrowNeeded).toList();
+      lastGraspedMemberIds.value = grasped.map((m) => m.id).toList();
+
+      // Find which court the first grasped player is playing in for clear display
+      int courtOfGrasped = 1;
+      for (var m in matches) {
+        if (m.teamA.players.any((p) => p.id == grasped.first.id) ||
+            m.teamB.players.any((p) => p.id == grasped.first.id)) {
+          courtOfGrasped = m.courtNumber;
+          break;
+        }
+      }
+
+      final extraCourtPlayers = [...remainderPlayers, ...grasped];
+      final extraMatch = _findBestDoublesMatch(
+        extraCourtPlayers,
+        courtsCount + 1,
+        borrowedIds: grasped.map((m) => m.id).toList(),
+        borrowNote: grasped.length == 1
+            ? 'Grasped ${grasped.first.name} from Court $courtOfGrasped so all $restingCount remaining players play!'
+            : 'Grasped ${grasped.map((m) => m.name).join(' & ')} so all $restingCount remaining players play!',
+      );
+
+      matches.add(extraMatch);
       restingList = [];
       lastRestedMemberIds.clear();
-    }
+    } else {
+      // Standard rotation without grasping
+      if (restingCount > 0) {
+        final sortedForRotation = List<Member>.from(presentPlayers);
+        sortedForRotation.sort((a, b) {
+          final aRested = lastRestedMemberIds.contains(a.id) ? 0 : 1;
+          final bRested = lastRestedMemberIds.contains(b.id) ? 0 : 1;
+          return aRested.compareTo(bRested);
+        });
 
-    // Balance active players into `courtsCount` matches of 2 vs 2!
-    final matches = _findBestBalancedMatches(activeList, courtsCount);
+        final activeList = sortedForRotation.sublist(0, activeCount);
+        restingList = sortedForRotation.sublist(activeCount);
+        lastRestedMemberIds.value = restingList.map((m) => m.id).toList();
+        matches = _findBestBalancedMatches(activeList, courtsCount);
+      } else {
+        matches = _findBestBalancedMatches(presentPlayers, courtsCount);
+        restingList = [];
+        lastRestedMemberIds.clear();
+      }
+    }
 
     currentMatchRound.value = MatchRound(
       roundNumber: roundNum,
@@ -713,9 +771,12 @@ class BadmintonController extends GetxController {
     );
 
     if (showNotice) {
+      final note = canGrasp
+          ? 'Set $roundNum ready with ${matches.length} courts! 1 player grasped so all ${presentPlayers.length} play!'
+          : 'Set $roundNum ready with ${matches.length} balanced court${matches.length > 1 ? 's' : ''} in sets of 2.';
       _showSnackbar(
         'Matches Generated! 🏸',
-        'Set $roundNum ready with ${matches.length} balanced court${matches.length > 1 ? 's' : ''} in sets of 2.',
+        note,
         backgroundColor: const Color(0xFF0F9D58),
         colorText: Colors.white,
         duration: const Duration(seconds: 2),
@@ -761,7 +822,11 @@ class BadmintonController extends GetxController {
 
   /// Given 4 players, finds the most balanced 2 vs 2 doubles pairing
   BadmintonMatch _findBestDoublesMatch(
-      List<Member> fourPlayers, int courtNumber) {
+    List<Member> fourPlayers,
+    int courtNumber, {
+    List<String> borrowedIds = const [],
+    String? borrowNote,
+  }) {
     final p = fourPlayers;
     // 3 possible pairings:
     // Pairing 1: (p0, p1) vs (p2, p3)
@@ -802,6 +867,8 @@ class BadmintonController extends GetxController {
       courtNumber: courtNumber,
       teamA: teams[0],
       teamB: teams[1],
+      borrowedPlayerIds: borrowedIds,
+      borrowedCourtNote: borrowNote,
     );
   }
 
@@ -818,15 +885,396 @@ class BadmintonController extends GetxController {
 
     for (var match in round.matches) {
       buffer.writeln('🏸 *COURT ${match.courtNumber} (2 vs 2):*');
-      buffer.writeln('🟢 Team 1: ${match.teamA.playerNames}');
+      if (match.hasBorrowedPlayer) {
+        buffer.writeln('ℹ️ _${match.borrowedCourtNote ?? "Includes grasped player"}_');
+      }
+      final team1Text = match.teamA.players.map((p) {
+        return match.isPlayerBorrowed(p.id)
+            ? '${p.name} (🔄 Playing Double Duty)'
+            : p.name;
+      }).join(' & ');
+      final team2Text = match.teamB.players.map((p) {
+        return match.isPlayerBorrowed(p.id)
+            ? '${p.name} (🔄 Playing Double Duty)'
+            : p.name;
+      }).join(' & ');
+      buffer.writeln('🟢 Team 1: $team1Text');
       buffer.writeln('   vs');
-      buffer.writeln('🔵 Team 2: ${match.teamB.playerNames}');
+      buffer.writeln('🔵 Team 2: $team2Text');
       buffer.writeln('');
     }
 
     if (round.restingPlayers.isNotEmpty) {
       buffer.writeln(
           '⏳ *Resting this game:* ${round.restingPlayers.map((m) => m.name).join(', ')} (Plays next game!)');
+      buffer.writeln('-----------------------------------');
+    }
+
+    buffer.writeln('🏸 Play hard and have fun! 🔥');
+    return buffer.toString();
+  }
+
+  // MARK: - Tournament Management (Knockout, Semi-Finals, Grand Final)
+
+  List<BadmintonTeam> _generateBalancedDoublesTeams(List<Member> players) {
+    // Sort players by skill level descending (Good: 3, Medium: 2, Less: 1)
+    final sorted = List<Member>.from(players)
+      ..sort((a, b) => b.skillLevel.compareTo(a.skillLevel));
+
+    final int numTeams = sorted.length ~/ 2;
+    List<BadmintonTeam> teams = [];
+
+    // Pair top half with bottom half inverted to balance each team (Good + Less, Medium + Medium)
+    for (int i = 0; i < numTeams; i++) {
+      final p1 = sorted[i];
+      final p2 = sorted[sorted.length - 1 - i];
+      teams.add(
+        BadmintonTeam(
+          name: 'Team ${i + 1}',
+          players: [p1, p2],
+        ),
+      );
+    }
+    return teams;
+  }
+
+  void startTournament() {
+    final presentPlayers = members
+        .where((m) => selectedPresentMemberIds.contains(m.id))
+        .toList();
+
+    if (presentPlayers.length < 4) {
+      _showSnackbar(
+        'Need At Least 4 Players',
+        'Please select at least 4 present players using the checkboxes to create tournament teams of 2.',
+        backgroundColor: Colors.orange.shade800,
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    final teams = _generateBalancedDoublesTeams(presentPlayers);
+
+    if (teams.length == 2) {
+      // Direct Grand Final
+      final finalMatch = TournamentMatch(
+        id: _generateId('tm'),
+        stageName: 'Grand Final',
+        matchIndex: 1,
+        teamA: teams[0],
+        teamB: teams[1],
+      );
+      tournamentState.value = TournamentState(
+        allTeams: teams,
+        currentStage: 'Grand Final',
+        matches: [finalMatch],
+      );
+      _showSnackbar(
+        'Grand Final Ready! 🏆',
+        '${teams[0].name} vs ${teams[1].name}',
+        backgroundColor: const Color(0xFF0F9D58),
+        colorText: Colors.white,
+      );
+    } else if (teams.length == 3) {
+      // EXACT USER REQUIREMENT:
+      // "if 3 teams in semi final make a random match from 3 with 2 and 1 moves to final"
+      final shuffled = List<BadmintonTeam>.from(teams)..shuffle(Random());
+      final byeTeam = shuffled[0]; // 1 moves directly to final!
+      final sfTeamA = shuffled[1];
+      final sfTeamB = shuffled[2];
+
+      final sfMatch = TournamentMatch(
+        id: _generateId('tm'),
+        stageName: 'Semi-Final',
+        matchIndex: 1,
+        teamA: sfTeamA,
+        teamB: sfTeamB,
+      );
+
+      tournamentState.value = TournamentState(
+        allTeams: teams,
+        currentStage: 'Semi-Finals',
+        matches: [sfMatch],
+        byeTeam: byeTeam,
+      );
+      _showSnackbar(
+        'Semi-Final Ready! 🏸',
+        '${sfTeamA.name} vs ${sfTeamB.name}. ${byeTeam.name} receives a BYE directly to the Final!',
+        backgroundColor: const Color(0xFF0F9D58),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+      );
+    } else if (teams.length == 4) {
+      final shuffled = List<BadmintonTeam>.from(teams)..shuffle(Random());
+      final sf1 = TournamentMatch(
+        id: _generateId('tm'),
+        stageName: 'Semi-Final 1',
+        matchIndex: 1,
+        teamA: shuffled[0],
+        teamB: shuffled[1],
+      );
+      final sf2 = TournamentMatch(
+        id: _generateId('tm'),
+        stageName: 'Semi-Final 2',
+        matchIndex: 2,
+        teamA: shuffled[2],
+        teamB: shuffled[3],
+      );
+
+      tournamentState.value = TournamentState(
+        allTeams: teams,
+        currentStage: 'Semi-Finals',
+        matches: [sf1, sf2],
+      );
+      _showSnackbar(
+        'Semi-Finals Ready! 🏸',
+        '4 teams in 2 Semi-Final matches. Winners advance to Grand Final!',
+        backgroundColor: const Color(0xFF0F9D58),
+        colorText: Colors.white,
+      );
+    } else {
+      // 5 or more teams: Knockout stage leading to Semi-Finals & Final
+      final shuffled = List<BadmintonTeam>.from(teams)..shuffle(Random());
+      List<TournamentMatch> koMatches = [];
+      BadmintonTeam? byeTeam;
+
+      if (shuffled.length % 2 == 1) {
+        byeTeam = shuffled.removeLast();
+      }
+
+      for (int i = 0; i < shuffled.length; i += 2) {
+        koMatches.add(
+          TournamentMatch(
+            id: _generateId('tm'),
+            stageName: 'Knockout Match ${(i ~/ 2) + 1}',
+            matchIndex: (i ~/ 2) + 1,
+            teamA: shuffled[i],
+            teamB: shuffled[i + 1],
+          ),
+        );
+      }
+
+      tournamentState.value = TournamentState(
+        allTeams: teams,
+        currentStage: teams.length <= 6 ? 'Knockout Round' : 'Quarter-Finals',
+        matches: koMatches,
+        byeTeam: byeTeam,
+      );
+      _showSnackbar(
+        'Tournament Bracket Generated! 🏸',
+        '${teams.length} teams competing! Play matches to advance to Semi-Finals & Final.',
+        backgroundColor: const Color(0xFF0F9D58),
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  void markTournamentMatchWinner(String matchId, String winningTeamName) {
+    final current = tournamentState.value;
+    if (current == null) return;
+
+    final updatedMatches = current.matches.map((m) {
+      if (m.id == matchId) {
+        return m.copyWith(winnerTeamName: winningTeamName);
+      }
+      return m;
+    }).toList();
+
+    tournamentState.value = TournamentState(
+      allTeams: current.allTeams,
+      currentStage: current.currentStage,
+      matches: updatedMatches,
+      byeTeam: current.byeTeam,
+      champion: current.champion,
+      runnerUp: current.runnerUp,
+    );
+
+    // If all matches in this stage are completed, advance to next stage!
+    final allDone = updatedMatches.every((m) => m.isCompleted);
+    if (!allDone) return;
+
+    if (current.currentStage == 'Grand Final') {
+      final finalMatch = updatedMatches.first;
+      final champ = finalMatch.winnerTeam!;
+      final runner =
+          champ.name == finalMatch.teamA.name ? finalMatch.teamB : finalMatch.teamA;
+
+      tournamentState.value = TournamentState(
+        allTeams: current.allTeams,
+        currentStage: 'Completed',
+        matches: updatedMatches,
+        champion: champ,
+        runnerUp: runner,
+      );
+
+      _showSnackbar(
+        '🏆 CHAMPIONS CROWNED! 🏸',
+        '${champ.name} (${champ.playerNames}) won the Grand Final!',
+        backgroundColor: const Color(0xFF1B5E20),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 4),
+        icon: const Icon(Icons.emoji_events, color: Colors.amber, size: 28),
+      );
+    } else if (current.currentStage == 'Semi-Finals') {
+      List<BadmintonTeam> finalists = [];
+      for (var m in updatedMatches) {
+        if (m.winnerTeam != null) finalists.add(m.winnerTeam!);
+      }
+      if (current.byeTeam != null) {
+        finalists.add(current.byeTeam!);
+      }
+
+      if (finalists.length == 2) {
+        final grandFinalMatch = TournamentMatch(
+          id: _generateId('tm'),
+          stageName: 'Grand Final',
+          matchIndex: 1,
+          teamA: finalists[0],
+          teamB: finalists[1],
+        );
+
+        tournamentState.value = TournamentState(
+          allTeams: current.allTeams,
+          currentStage: 'Grand Final',
+          matches: [grandFinalMatch],
+          byeTeam: null,
+        );
+
+        _showSnackbar(
+          'Grand Final Set! 🏆',
+          '${finalists[0].name} vs ${finalists[1].name}',
+          backgroundColor: const Color(0xFF0F9D58),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+          icon: const Icon(Icons.emoji_events, color: Colors.white),
+        );
+      }
+    } else {
+      // Knockout / Quarter-Finals stage completed
+      List<BadmintonTeam> advancing = [];
+      for (var m in updatedMatches) {
+        if (m.winnerTeam != null) advancing.add(m.winnerTeam!);
+      }
+      if (current.byeTeam != null) {
+        advancing.add(current.byeTeam!);
+      }
+
+      if (advancing.length == 3) {
+        // User's 3-team Semi-Final rule!
+        final shuffled = List<BadmintonTeam>.from(advancing)..shuffle(Random());
+        final bye = shuffled[0];
+        final sfA = shuffled[1];
+        final sfB = shuffled[2];
+
+        final sfMatch = TournamentMatch(
+          id: _generateId('tm'),
+          stageName: 'Semi-Final',
+          matchIndex: 1,
+          teamA: sfA,
+          teamB: sfB,
+        );
+
+        tournamentState.value = TournamentState(
+          allTeams: current.allTeams,
+          currentStage: 'Semi-Finals',
+          matches: [sfMatch],
+          byeTeam: bye,
+        );
+
+        _showSnackbar(
+          'Semi-Finals (3 Teams)! 🏸',
+          '${sfA.name} vs ${sfB.name}. ${bye.name} moves directly to Grand Final!',
+          backgroundColor: const Color(0xFF0F9D58),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 4),
+        );
+      } else if (advancing.length == 4) {
+        final sf1 = TournamentMatch(
+          id: _generateId('tm'),
+          stageName: 'Semi-Final 1',
+          matchIndex: 1,
+          teamA: advancing[0],
+          teamB: advancing[1],
+        );
+        final sf2 = TournamentMatch(
+          id: _generateId('tm'),
+          stageName: 'Semi-Final 2',
+          matchIndex: 2,
+          teamA: advancing[2],
+          teamB: advancing[3],
+        );
+
+        tournamentState.value = TournamentState(
+          allTeams: current.allTeams,
+          currentStage: 'Semi-Finals',
+          matches: [sf1, sf2],
+        );
+      } else if (advancing.length == 2) {
+        final gf = TournamentMatch(
+          id: _generateId('tm'),
+          stageName: 'Grand Final',
+          matchIndex: 1,
+          teamA: advancing[0],
+          teamB: advancing[1],
+        );
+        tournamentState.value = TournamentState(
+          allTeams: current.allTeams,
+          currentStage: 'Grand Final',
+          matches: [gf],
+        );
+      }
+    }
+  }
+
+  void resetTournament() {
+    tournamentState.value = null;
+  }
+
+  String generateTournamentWhatsAppText() {
+    final tState = tournamentState.value;
+    if (tState == null) return '';
+
+    final buffer = StringBuffer();
+    buffer.writeln(
+        '🏸 *BADMINTON TOURNAMENT - ${tState.currentStage.toUpperCase()}* 🏸');
+    buffer.writeln('👥 ${tState.allTeams.length} Teams Competing');
+    buffer.writeln('-----------------------------------');
+
+    if (tState.isFinished && tState.champion != null) {
+      buffer.writeln('🏆 *TOURNAMENT CHAMPIONS!* 🏆');
+      buffer.writeln(
+          '🥇 1st Place: *${tState.champion!.name}* (${tState.champion!.playerNames})');
+      if (tState.runnerUp != null) {
+        buffer.writeln(
+            '🥈 Runner-Up: *${tState.runnerUp!.name}* (${tState.runnerUp!.playerNames})');
+      }
+      buffer.writeln('-----------------------------------');
+      buffer.writeln('🎉 Congratulations to all players! 🔥🏸');
+      return buffer.toString();
+    }
+
+    for (var match in tState.matches) {
+      buffer.writeln('🏸 *${match.stageName.toUpperCase()}:*');
+      final team1Prefix =
+          match.winnerTeamName == match.teamA.name ? '🏆 ' : '';
+      final team2Prefix =
+          match.winnerTeamName == match.teamB.name ? '🏆 ' : '';
+      buffer.writeln(
+          '🟢 $team1Prefix${match.teamA.name}: ${match.teamA.playerNames}');
+      buffer.writeln('   vs');
+      buffer.writeln(
+          '🔵 $team2Prefix${match.teamB.name}: ${match.teamB.playerNames}');
+      if (match.isCompleted) {
+        buffer.writeln('✅ Winner: *${match.winnerTeamName}*');
+      }
+      buffer.writeln('');
+    }
+
+    if (tState.byeTeam != null) {
+      buffer.writeln('🎟️ *DIRECT TO GRAND FINAL (BYE):*');
+      buffer.writeln(
+          '⭐ *${tState.byeTeam!.name}* (${tState.byeTeam!.playerNames})');
+      buffer.writeln('   (Advances straight to Grand Final! 🏆)');
       buffer.writeln('-----------------------------------');
     }
 

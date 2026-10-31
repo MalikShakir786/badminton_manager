@@ -14,7 +14,7 @@ class CollectionEvent {
     this.notes = '',
     required this.targetMemberIds,
     DateTime? createdAt,
-    this.shuttleBrand = 'Yonex Mavis 350',
+    this.shuttleBrand = 'Ghafoor Gold',
   }) : createdAt = createdAt ?? DateTime.now();
 
   double get totalTargetAmount => amountPerMember * targetMemberIds.length;
