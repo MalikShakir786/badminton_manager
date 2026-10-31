@@ -328,6 +328,59 @@ class _DashboardHomeTab extends StatelessWidget {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 10),
+
+                      // Cash in Kitty & Shuttle Stock Strip
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF86EFAC)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.account_balance_wallet,
+                                  size: 18,
+                                  color: AppTheme.primaryGreen,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Kitty Cash: $curr${controller.kittyBalanceRemaining.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: AppTheme.primaryGreen,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.sports_tennis,
+                                  size: 18,
+                                  color: AppTheme.primaryGreen,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Stock: ${controller.currentShuttleStock} Shuttle${controller.currentShuttleStock != 1 ? 's' : ''}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: AppTheme.primaryGreen,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 14),
 
                       // Highlight Quick Action Button: New 500 Shuttle Entry

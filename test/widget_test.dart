@@ -20,10 +20,10 @@ void main() {
 
     // 1. Add new member with skill level
     final initialCount = controller.members.length;
-    controller.addMember(name: 'Test Player', phone: '1234567890', skillLevel: 3);
+    controller.addMember(name: 'Test Player', phone: '1234567890', skillLevel: 2);
     expect(controller.members.length, equals(initialCount + 1));
     final newMember = controller.members.last;
-    expect(newMember.skillLevel, equals(3));
+    expect(newMember.skillLevel, equals(2));
 
     // 2. Add a new 500 collection entry
     // "whenever we enter a new entry like we have to collect new 500 then we add the new 500 entry and it added to all membvers remainings"
@@ -145,6 +145,49 @@ void main() {
     expect(lineupText.contains('COURT 1'), isTrue);
     expect(lineupText.contains('Team 1'), isTrue);
     expect(lineupText.contains('Team 2'), isTrue);
+
+    await tester.pump(const Duration(milliseconds: 500));
+  });
+
+  testWidgets('Shuttle purchase deduction and stock tracking workflow', (WidgetTester tester) async {
+    final controller = BadmintonController();
+    Get.put(controller);
+
+    // Reset payments & purchases to test exact numbers from user request
+    controller.payments.clear();
+    controller.shuttlePurchases.clear();
+    controller.shuttlesUsed.value = 0;
+
+    // 1. Simulate collected 1000 from members
+    controller.recordPayment(memberId: 'm1', amount: 500);
+    controller.recordPayment(memberId: 'm2', amount: 500);
+    expect(controller.totalGroupCollected, equals(1000.0));
+    expect(controller.kittyBalanceRemaining, equals(1000.0));
+    expect(controller.currentShuttleStock, equals(0));
+
+    // 2. Buy 2 shuttles for 700
+    // "means if we have collected the thousand and get 2 shuttles for 700 then it must show in the shuttles section that these is total amount remaining"
+    controller.recordShuttlePurchase(
+      title: 'Yonex Mavis 350',
+      quantity: 2,
+      totalCost: 700.0,
+    );
+
+    // Verify 700 is deducted from collected 1000 -> remaining kitty is 300!
+    expect(controller.totalSpentOnShuttles, equals(700.0));
+    expect(controller.kittyBalanceRemaining, equals(300.0));
+    expect(controller.totalShuttlesStockBought, equals(2));
+    expect(controller.currentShuttleStock, equals(2));
+
+    // 3. Open/use 1 shuttle on court
+    controller.useShuttle(count: 1);
+    expect(controller.currentShuttleStock, equals(1));
+
+    // 4. Test WhatsApp report includes kitty balance and stock
+    final report = controller.generateShareableSummary();
+    expect(report.contains('Spent on Shuttles: ₹700'), isTrue);
+    expect(report.contains('Kitty Cash Remaining: ₹300'), isTrue);
+    expect(report.contains('Shuttle Stock: 1 Shuttle(s)'), isTrue);
 
     await tester.pump(const Duration(milliseconds: 500));
   });

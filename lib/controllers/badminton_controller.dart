@@ -7,6 +7,7 @@ import '../models/collection_event.dart';
 import '../models/payment_record.dart';
 import '../models/member_balance.dart';
 import '../models/badminton_match.dart';
+import '../models/shuttle_purchase.dart';
 
 class BadmintonController extends GetxController {
   final GetStorage _storage;
@@ -18,6 +19,10 @@ class BadmintonController extends GetxController {
   final RxList<CollectionEvent> collections = <CollectionEvent>[].obs;
   final RxList<PaymentRecord> payments = <PaymentRecord>[].obs;
 
+  // Shuttle Purchases & Stock
+  final RxList<ShuttlePurchase> shuttlePurchases = <ShuttlePurchase>[].obs;
+  final RxInt shuttlesUsed = 0.obs;
+
   final RxString currencySymbol = '₹'.obs;
   final RxString searchQuery = ''.obs;
   final RxString filterStatus = 'all'.obs; // 'all', 'pending', 'settled'
@@ -27,6 +32,29 @@ class BadmintonController extends GetxController {
   final Rx<MatchRound?> currentMatchRound = Rx<MatchRound?>(null);
   final RxInt matchRoundNumber = 1.obs;
   final RxList<String> lastRestedMemberIds = <String>[].obs;
+
+  double get totalSpentOnShuttles {
+    double sum = 0;
+    for (var p in shuttlePurchases) {
+      sum += p.totalCost;
+    }
+    return sum;
+  }
+
+  /// Cash remaining in kitty after deducting shuttle purchases:
+  /// e.g. Collected 1000 - Bought 2 shuttles for 700 = 300 remaining!
+  double get kittyBalanceRemaining => totalGroupCollected - totalSpentOnShuttles;
+
+  int get totalShuttlesStockBought {
+    int sum = 0;
+    for (var p in shuttlePurchases) {
+      sum += p.quantity;
+    }
+    return sum;
+  }
+
+  int get currentShuttleStock =>
+      max(0, totalShuttlesStockBought - shuttlesUsed.value);
 
   static const List<int> avatarColors = [
     0xFF1B5E20, // Green
@@ -92,6 +120,15 @@ class BadmintonController extends GetxController {
             .map((p) => PaymentRecord.fromMap(Map<String, dynamic>.from(p)))
             .toList();
       }
+
+      final purchasesJson = _storage.read<List>('shuttlePurchases');
+      if (purchasesJson != null) {
+        shuttlePurchases.value = purchasesJson
+            .map((p) => ShuttlePurchase.fromMap(Map<String, dynamic>.from(p)))
+            .toList();
+      }
+
+      shuttlesUsed.value = _storage.read<int>('shuttlesUsed') ?? 0;
     } catch (e) {
       debugPrint('Storage load error: $e');
     }
@@ -112,6 +149,9 @@ class BadmintonController extends GetxController {
       _storage.write('members', members.map((m) => m.toMap()).toList());
       _storage.write('collections', collections.map((c) => c.toMap()).toList());
       _storage.write('payments', payments.map((p) => p.toMap()).toList());
+      _storage.write(
+          'shuttlePurchases', shuttlePurchases.map((p) => p.toMap()).toList());
+      _storage.write('shuttlesUsed', shuttlesUsed.value);
     } catch (e) {
       debugPrint('Storage write error: $e');
     }
@@ -417,7 +457,10 @@ class BadmintonController extends GetxController {
     buffer.writeln('🏸 *BADMINTON CLUB - SHUTTLE COLLECTION REPORT* 🏸');
     buffer.writeln('📅 Date: $dateStr');
     buffer.writeln('💰 Total Collected: ${currencySymbol.value}${totalGroupCollected.toStringAsFixed(0)}');
-    buffer.writeln('⏳ Total Pending: ${currencySymbol.value}${totalGroupPending.toStringAsFixed(0)}');
+    buffer.writeln('🛒 Spent on Shuttles: ${currencySymbol.value}${totalSpentOnShuttles.toStringAsFixed(0)}');
+    buffer.writeln('💵 Kitty Cash Remaining: ${currencySymbol.value}${kittyBalanceRemaining.toStringAsFixed(0)}');
+    buffer.writeln('📦 Shuttle Stock: $currentShuttleStock Shuttle(s)');
+    buffer.writeln('⏳ Total Pending Dues: ${currencySymbol.value}${totalGroupPending.toStringAsFixed(0)}');
     buffer.writeln('-----------------------------------');
 
     final pending = allMemberBalances.where((b) => b.remainingDue > 0).toList();
@@ -528,9 +571,9 @@ class BadmintonController extends GetxController {
     // A collection entry: 500 for Yonex Mavis 350 shuttles
     final sampleCollection = CollectionEvent(
       id: 'c1',
-      title: 'New Shuttles (Yonex Mavis 350 Box)',
+      title: 'New Shuttles (Yonex Mavis 350)',
       amountPerMember: 500,
-      notes: 'Monthly shuttle pool - 6 tubes',
+      notes: 'Monthly shuttle pool - 6 shuttles',
       targetMemberIds: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8'],
       createdAt: now.subtract(const Duration(days: 3)),
       shuttleBrand: 'Yonex Mavis 350',
@@ -571,6 +614,19 @@ class BadmintonController extends GetxController {
     ];
 
     payments.value = samplePayments;
+
+    // Sample shuttle purchase: 2 shuttles for 700 (matching user's example!)
+    final samplePurchase = ShuttlePurchase(
+      id: 'sp1',
+      title: 'Yonex Mavis 350 (2 shuttles)',
+      quantity: 2,
+      totalCost: 700,
+      date: now.subtract(const Duration(days: 2)),
+      notes: 'Bought for club games',
+    );
+    shuttlePurchases.value = [samplePurchase];
+    shuttlesUsed.value = 0;
+
     saveToStorage();
   }
 
@@ -578,11 +634,76 @@ class BadmintonController extends GetxController {
     members.clear();
     collections.clear();
     payments.clear();
+    shuttlePurchases.clear();
+    shuttlesUsed.value = 0;
     _storage.erase();
     loadInitialSampleData();
     _showSnackbar(
       'Reset Complete',
       'Sample badminton data restored.',
+    );
+  }
+
+  // MARK: - Shuttle Purchase & Stock Operations
+  void recordShuttlePurchase({
+    required String title,
+    required int quantity,
+    required double totalCost,
+    String notes = '',
+  }) {
+    final purchase = ShuttlePurchase(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title.trim().isEmpty ? 'Badminton Shuttles' : title.trim(),
+      quantity: quantity > 0 ? quantity : 1,
+      totalCost: totalCost,
+      date: DateTime.now(),
+      notes: notes.trim(),
+    );
+
+    shuttlePurchases.insert(0, purchase);
+    saveToStorage();
+
+    _showSnackbar(
+      'Shuttles Purchased 🏸',
+      'Bought $quantity shuttle(s) for ${currencySymbol.value}${totalCost.toStringAsFixed(0)}. Remaining in Kitty: ${currencySymbol.value}${kittyBalanceRemaining.toStringAsFixed(0)}',
+      backgroundColor: const Color(0xFF0F9D58),
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+      icon: const Icon(Icons.shopping_bag, color: Colors.white),
+    );
+  }
+
+  void useShuttle({int count = 1}) {
+    if (currentShuttleStock <= 0) {
+      _showSnackbar(
+        'Out of Stock! ⚠️',
+        'No shuttles left in stock. Tap "+ Buy Shuttles" to add new stock!',
+        backgroundColor: Colors.orange.shade800,
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    shuttlesUsed.value += count;
+    saveToStorage();
+
+    _showSnackbar(
+      'Shuttle Used 🏸',
+      'Used $count shuttle. $currentShuttleStock shuttle(s) remaining in stock.',
+      backgroundColor: Colors.blue.shade700,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 2),
+      icon: const Icon(Icons.sports_tennis, color: Colors.white),
+    );
+  }
+
+  void deleteShuttlePurchase(String id) {
+    shuttlePurchases.removeWhere((p) => p.id == id);
+    saveToStorage();
+    _showSnackbar(
+      'Purchase Deleted',
+      'Shuttle purchase removed and kitty balance restored.',
+      duration: const Duration(seconds: 2),
     );
   }
 
